@@ -87,6 +87,11 @@ class HanabiEnv {
     numStep_ = 0;
   }
 
+  bool isChance() {
+    assert(!terminated() && state_);
+    return state_->CurPlayer() == hle::kChancePlayerId;
+  }
+
   void resetWithDeck(const std::vector<hle::HanabiCardValue>& deck) {
     assert(terminated());
     state_ = std::make_unique<hle::HanabiState>(&game_);
@@ -96,6 +101,16 @@ class HanabiEnv {
       state_->ApplyRandomChance();
     }
     numStep_ = 0;
+  }
+
+  void resetWithDeckNoChance(const std::vector<hle::HanabiCardValue>& deck) {
+    assert(terminated());
+    state_ = std::make_unique<hle::HanabiState>(&game_);
+    state_->SetDeckOrder(deck);
+  }
+
+  void applyGameMove(hle::HanabiMove move) {
+    state_->ApplyMove(move);
   }
 
   void step(hle::HanabiMove move) {
@@ -155,8 +170,16 @@ class HanabiEnv {
     return lastEpisodeScore_;
   }
 
+  std::vector<hle::HanabiHistoryItem> moveHistory() const {
+    return state_->MoveHistory();
+  }
+
   std::vector<std::string> deckHistory() const {
     return state_->DeckHistory();
+  }
+
+  std::vector<hle::HanabiCardValue> deckCardHistory() const {
+    return state_->DeckCardHistory();
   }
 
   const hle::HanabiState& getHleState() const {

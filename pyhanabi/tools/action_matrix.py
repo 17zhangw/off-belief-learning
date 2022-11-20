@@ -121,12 +121,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
     parser.add_argument("--num_player", type=int, default=2)
+    parser.add_argument("--num_game", type=int, default=10000)
+    parser.add_argument("--num_thread", type=int, default=1)
     parser.add_argument("--folder", type=str)
     parser.add_argument("--output", type=str)
     args = parser.parse_args()
 
     if args.model is not None:
-        dataset, _, _ = create_dataset_new(args.model)
+        dataset, _, _ = create_dataset_new(args.model, num_game=args.num_game, num_thread=args.num_thread)
         normed_p0_p1, _ = analyze(dataset, args.num_player)
         plot(normed_p0_p1, "action_matrix", args.num_player, savefig=args.output)
     elif args.folder is not None:

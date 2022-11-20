@@ -25,6 +25,9 @@ std::string HanabiHistoryItem::ToString() const {
   if (player >= 0) {
     str += " by player " + std::to_string(player);
   }
+  else {
+    str += " to player " + std::to_string(deal_to_player);
+  }
   if (scored) {
     str += " scored";
   }

@@ -89,6 +89,22 @@ class HanabiState {
       return deck;
     }
 
+    std::vector<HanabiCardValue> DeckCardHistory(std::mt19937* rng) {
+      assert(!intervened_);
+      // deal all cards to finish a deck
+      while (!Empty()) {
+        DealCard(rng);
+      }
+
+      std::vector<HanabiCardValue> deck;
+      for (auto i : deck_history_) {
+        int color = IndexToColor(i);
+        int rank = IndexToRank(i);
+        deck.emplace_back(color, rank);
+      }
+      return deck;
+    }
+
     int CardToIndex(int color, int rank) const {
       return color * num_ranks_ + rank;
     }
@@ -163,6 +179,10 @@ class HanabiState {
 
   std::vector<std::string> DeckHistory() {
     return deck_.DeckHistory(parent_game_->rng());
+  }
+
+  std::vector<HanabiCardValue> DeckCardHistory() {
+    return deck_.DeckCardHistory(parent_game_->rng());
   }
 
   void SetGame(const HanabiGame* game) {
