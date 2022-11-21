@@ -1,9 +1,12 @@
+from pathlib import Path
+import itertools
+import glob
+from tqdm import tqdm
 import pickle
 import argparse
 import getpass
 import os
 import sys
-import pickle
 import logging
 import copy
 
@@ -123,6 +126,9 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
     assert divergence_point <= len(game_state.game_moves)
     agents = [p1_agent, p2_agent]
 
+    old_deck = game_state.game_deck
+    old_actions = game_state.game_moves
+
     def recolor():
         color = [0, 1, 2, 3, 4]
         while color == [0, 1, 2, 3, 4]:
@@ -143,8 +149,9 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
                 -1 if action.color() == -1 else remapper[action.color()],
                 action.rank()))
         game_state.game_moves = remapped_actions
-        
-    #recolor()
+        return remapper
+
+    remapper = recolor()
 
     # Load the deck with recolored cards.
     game = hanalearn.HanabiEnv(game_state.params, -1, False)  # max_len  # verbose
@@ -200,6 +207,10 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
             return actions, new_hids
 
         def seed():
+            nonlocal seed_diverged
+            nonlocal game
+            nonlocal played_moves
+            nonlocal hids
             for i, move in enumerate(game_state.game_moves):
                 if game.is_chance():
                     # See applyMove() in rlcc/utils.cc for why we don't try to
@@ -227,6 +238,7 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
 
         if not seeded:
             seed()
+            played_moves.append("diverge")
             seeded = True
 
         if game.is_chance():
@@ -257,13 +269,16 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
         "recolor_life_delta": game.get_life() - game_state.life,
         "recolor_info_delta": game.get_info() - game_state.info,
         "recolor_score_delta": game.get_score() - game_state.score,
-        "played_moves": played_moves
+        "old_deck": old_deck,
+        "old_moves": old_actions,
+        "played_moves": played_moves,
+        "remapper": remapper,
     }
 
 
 def run_simulation(p1_model, p2_model, pickle_output, num_game, fake_point, fake_percent):
     sim_results = []
-    for _ in range(num_game):
+    for _ in tqdm(range(num_game), leave=False):
         gs = run_game(p1_model, p2_model)
         fake_spot = None
         if fake_point is not None:
@@ -274,10 +289,10 @@ def run_simulation(p1_model, p2_model, pickle_output, num_game, fake_point, fake
             fake_spot = int(len(gs.game_moves) * fake_percent)
             if fake_spot < 1:
                 continue
-        sim_results.append(replay_game(p1_model, p2_model, gs, fake_point))
+        sim_results.append(replay_game(p1_model, p2_model, gs, fake_spot))
 
     with open(pickle_output, "wb") as f:
-        f.dump(sim_results)
+        pickle.dump(sim_results, f)
 
 
 if __name__ == "__main__":
@@ -288,10 +303,23 @@ if __name__ == "__main__":
     parser.add_argument("--fake-point", type=int, default=None)
     # Percent Point of each game to fake out.
     parser.add_argument("--fake-point-percent", type=float, default=None)
-    parser.add_argument("--pickle-output", type=str, required=True)
-    parser.add_argument("--p1-model", type=str, required=True)
-    parser.add_argument("--p2-model", type=str, required=True)
+    parser.add_argument("--glob-pattern", type=str, required=True)
     args = parser.parse_args()
+    assert args.fake_point is not None or args.fake_point_percent is not None
 
-    assert args.fake_point is not None or args.fake_output_percent is not None
-    run_simulation(args.p1_model, args.p2_model, args.pickle_output, num_game=args.num_game, fake_point=args.fake_point, fake_percent=args.fake_percent)
+    models = sorted([f for f in glob.glob(f"/home/wz2/off-belief-learning/models/{args.glob_pattern}/*/model0.pthw")])
+    for model1, model2 in tqdm(itertools.product(models, repeat=2), total=len(models)*2, leave=False):
+        path = Path(f"/home/wz2/off-belief-learning/pyhanabi/exps/{args.glob_pattern}")
+        if args.fake_point is not None:
+            path = path / f"fkpt{args.fake_point}"
+        elif args.fake_point_percent is not None:
+            path = path / f"fkpct{args.fake_point_percent * 100}"
+
+        model1_name = Path(model1).parts[-2]
+        (path / model1_name).mkdir(parents=True, exist_ok=True)
+
+        model2_name = Path(model2).parts[-2]
+        output = f"{path}/{model1_name}/{model2_name}.pkl"
+        run_simulation(model1, model2, output, num_game=args.num_game, fake_point=args.fake_point, fake_percent=args.fake_point_percent)
+    assert False
+

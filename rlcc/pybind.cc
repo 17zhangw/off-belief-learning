@@ -49,6 +49,7 @@ PYBIND11_MODULE(hanalearn, m) {
       .def("get_info", &HanabiEnv::getInfo)
       .def("get_fireworks", &HanabiEnv::getFireworks)
       .def("get_hle_state", &HanabiEnv::getHleState)
+      .def("get_hle_game", &HanabiEnv::getHleGame)
       .def("get_move", &HanabiEnv::getMove)
       .def("get_obs_show_cards", &HanabiEnv::getObsShowCards)
       .def("get_last_action", &HanabiEnv::getLastAction)

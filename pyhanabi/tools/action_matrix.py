@@ -9,6 +9,10 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+from tqdm import tqdm
+import gc
+from pathlib import Path
+import glob
 import os, sys
 import argparse
 import pprint
@@ -119,17 +123,23 @@ def render_folder(sweep_folder, savefig=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str)
     parser.add_argument("--num_player", type=int, default=2)
     parser.add_argument("--num_game", type=int, default=10000)
     parser.add_argument("--num_thread", type=int, default=1)
-    parser.add_argument("--folder", type=str)
-    parser.add_argument("--output", type=str)
     args = parser.parse_args()
 
-    if args.model is not None:
-        dataset, _, _ = create_dataset_new(args.model, num_game=args.num_game, num_thread=args.num_thread)
+    models = sorted([f for f in glob.glob("/home/wz2/off-belief-learning/models/*/*/model0.pthw")])
+
+    for model in tqdm(models):
+        model_gen = Path(model).parts[-3]
+        parent = Path(model).parts[-2]
+        (Path("exps") / f"act_{model_gen}").mkdir(parents=True, exist_ok=True)
+        output = f"exps/act_{model_gen}/{parent}.png"
+        dataset, _, _ = create_dataset_new(model, num_game=args.num_game, num_thread=args.num_thread)
         normed_p0_p1, _ = analyze(dataset, args.num_player)
-        plot(normed_p0_p1, "action_matrix", args.num_player, savefig=args.output)
-    elif args.folder is not None:
-        render_folder(args.folder, args.output)
+        plot(normed_p0_p1, "action_matrix", args.num_player, savefig=output)
+
+        del dataset
+        del normed_p0_p1
+        gc.collect()
+        gc.collect()

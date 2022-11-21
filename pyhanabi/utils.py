@@ -24,7 +24,7 @@ from supervised_model import SupervisedAgent
 
 def load_supervised_agent(weight_file, device):
     # this is a bit hard-coded, works for now
-    print("loading file from: ", weight_file)
+    # print("loading file from: ", weight_file)
     try:
         cfg = get_train_config(weight_file)
     except:
@@ -148,7 +148,7 @@ def load_agent(weight_file, overwrite):
 
         return load_legacy_agent(weight_file)
 
-    print("loading file from: ", weight_file)
+    # print("loading file from: ", weight_file)
     cfg = get_train_config(weight_file)
     assert cfg is not None
 
