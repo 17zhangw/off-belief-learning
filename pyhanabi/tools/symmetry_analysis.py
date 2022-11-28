@@ -24,8 +24,9 @@ import random
 import r2d2
 
 class GameState(object):
-    def __init__(self, params, game_moves, game_deck, life, info, score):
+    def __init__(self, params, player_options, game_moves, game_deck, life, info, score):
         self.params = params
+        self.player_options = player_options
         self.game_moves = game_moves
         self.game_deck = game_deck
         self.life = life
@@ -33,6 +34,8 @@ class GameState(object):
         self.score = score
 
     params = None
+    # list[list[tuple(hid, obs, new_hid, action)]]
+    player_options = None
     # list[hanalearn.HanabiMove]
     game_moves = None
     # list[hanalearn.HanabiCardValue]
@@ -57,7 +60,6 @@ def run_game(p1_model, p2_model):
 
     params = {
         "players": str(len(agents)),
-        #"seed": str(-1),
         "colors": "5", # 5 colors.
         "ranks": "5", # 5 ranks.
         "hand_size": "5", # 5 cards hand size.
@@ -69,12 +71,12 @@ def run_game(p1_model, p2_model):
     game = hanalearn.HanabiEnv(params, -1, False)  # max_len  # verbose
     game.reset()
 
+    player_options = [[], []]
     hids = [agent.get_h0(1) for agent in agents]
     for h in hids:
         for k, v in h.items():
             h[k] = v.cuda().unsqueeze(0) # add batch dim
 
-    moves = []
     while not game.terminated():
         actions = []
         new_hids = []
@@ -93,13 +95,18 @@ def run_game(p1_model, p2_model):
                 actions.append([action.item()])
             else:
                 actions[-1].append(action.item())
+
+            player_options[i].append((
+                {k: hid[k].cpu() for k in hid.keys()},
+                {k: obs[k].cpu() for k in obs.keys()},
+                {k: new_hid[k].cpu() for k in new_hid.keys()},
+                game.get_move(action.item()),
+            ))
             new_hids.append(new_hid)
 
         hids = new_hids
         cur_player = game.get_current_player()
         move = game.get_move(actions[-1][cur_player])
-
-        moves.append(move)
         game.step(move)
 
     history = game.move_history()
@@ -109,10 +116,16 @@ def run_game(p1_model, p2_model):
 
     deck_card_history = game.deck_card_history()
     original_deck = [d for d in reversed(deck_card_history)]
-    return GameState(params=params, game_moves=moves, game_deck=original_deck, life=game.get_life(), info=game.get_info(), score = game.get_score())
+    return GameState(params=params,
+                     player_options=player_options,
+                     game_moves=moves,
+                     game_deck=original_deck,
+                     life=game.get_life(),
+                     info=game.get_info(),
+                     score=game.get_score())
 
 
-def replay_game(p1_model, p2_model, game_state, divergence_point):
+def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1):
     #### NOTE: the divergence_point is 1-indexed.
 
     # Load the agents.
@@ -129,7 +142,7 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
     old_deck = game_state.game_deck
     old_actions = game_state.game_moves
 
-    def recolor():
+    def recolor_state():
         color = [0, 1, 2, 3, 4]
         while color == [0, 1, 2, 3, 4]:
             random.shuffle(color)
@@ -138,7 +151,6 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
         remapped_deck = []
         for card in game_state.game_deck:
             remapped_deck.append(hanalearn.HanabiCardValue(remapper[card.color()], card.rank()))
-        game_state.game_deck = remapped_deck
 
         remapped_actions = []
         for action in game_state.game_moves:
@@ -148,35 +160,34 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
                 action.target_offset(),
                 -1 if action.color() == -1 else remapper[action.color()],
                 action.rank()))
-        game_state.game_moves = remapped_actions
-        return remapper
+        return remapper, remapped_deck, remapped_actions
 
-    remapper = recolor()
+    if recolor:
+        remapper, deck, game_moves = recolor_state()
+    else:
+        remapper = {i:i for i in range(0, 5)}
+        deck = game_state.game_deck
+        game_moves = game_state.game_moves
 
     # Load the deck with recolored cards.
     game = hanalearn.HanabiEnv(game_state.params, -1, False)  # max_len  # verbose
-    game.reset_with_deck_no_chance(game_state.game_deck)
+    game.reset_with_deck_no_chance(deck)
 
     # Make sure that we still deal cards in the right order.
-    # 10 is so that we deal through the "initial" hand loading.
-    deal_after_diverge = []
     deck_deal = []
-    for move in game_state.game_moves[10+divergence_point-1:]:
-        if move.move_type() == hanalearn.MoveType.Deal:
-            deal_after_diverge.append(move)
-
-    num_deal = len([c for c in game_state.game_moves if c.move_type() == hanalearn.MoveType.Deal])
-    for card in reversed(game_state.game_deck[:-num_deal]):
-        # Add moves to deal the remaining deck.
+    for card in reversed(deck):
         deck_deal.append(hanalearn.HanabiMove(
             hanalearn.MoveType.Deal,
             -1,
             -1,
             card.color(),
             card.rank()))
-    game_state.game_moves = game_state.game_moves[:10+divergence_point-1]
+
+    # This is the "force"
+    game_moves = game_moves[:10+divergence_point-1]
 
     # Seed the initial h0.
+    player_options = [[], []]
     hids = [agent.get_h0(1) for agent in agents]
     for h in hids:
         for k, v in h.items():
@@ -184,9 +195,9 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
 
     seed_diverged = False
     seeded = False
-    played_moves = []
     while not game.terminated():
         def advance():
+            nonlocal player_options
             actions = []
             new_hids = []
             for i, (agent, hid) in enumerate(zip(agents, hids)):
@@ -203,20 +214,22 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
                     actions.append([action.item()])
                 else:
                     actions[-1].append(action.item())
+                player_options[i].append((hid, obs, new_hid, game.get_move(action.item())))
                 new_hids.append(new_hid)
             return actions, new_hids
 
         def seed():
             nonlocal seed_diverged
             nonlocal game
-            nonlocal played_moves
             nonlocal hids
-            for i, move in enumerate(game_state.game_moves):
+            nonlocal deck_deal
+            for i, move in enumerate(game_moves):
                 if game.is_chance():
                     # See applyMove() in rlcc/utils.cc for why we don't try to
                     # advance the hidden state at all.
                     #
                     # Similarly, the OBL bot in bot/hanabi_client.py doesn't either.
+                    deck_deal = deck_deal[1:]
                     game.apply_move(move)
                 else:
                     actions, new_hids = advance()
@@ -234,92 +247,92 @@ def replay_game(p1_model, p2_model, game_state, divergence_point):
                     if infer_move_uid != move_uid:
                         seed_diverged = True
                     game.apply_move(move)
-                played_moves.append(move)
 
         if not seeded:
             seed()
-            played_moves.append("diverge")
             seeded = True
 
         if game.is_chance():
             # We need to deal a card, so deal in the deck order.
-            assert len(deal_after_diverge) > 0 or len(deck_deal) > 0
-            if len(deal_after_diverge) > 0:
-                move = deal_after_diverge[0]
-                deal_after_diverge = deal_after_diverge[1:]
-            else:
-                move = deck_deal[0]
-                deck_deal = deck_deal[1:]
+            assert len(deck_deal) > 0
+            move = deck_deal[0]
+            deck_deal = deck_deal[1:]
             # See applyMove() in rlcc/utils.cc for why we don't try to
             # advance the hidden state at all.
             game.apply_move(move)
-            played_moves.append(move)
         else:
             actions, new_hids = advance()
             cur_player = game.get_current_player()
             move = game.get_move(actions[-1][cur_player])
 
             game.apply_move(move)
-            played_moves.append(move)
             hids = new_hids
+
+    history = game.move_history()
+    moves = []
+    for move in history:
+        moves.append(move.move)
 
     assert game.terminated()
     return {
         "seed_diverged": seed_diverged,
-        "recolor_life_delta": game.get_life() - game_state.life,
-        "recolor_info_delta": game.get_info() - game_state.info,
-        "recolor_score_delta": game.get_score() - game_state.score,
-        "old_deck": old_deck,
-        "old_moves": old_actions,
-        "played_moves": played_moves,
+        "recolor_life_minus_base": game.get_life() - game_state.life,
+        "recolor_info_minus_base": game.get_info() - game_state.info,
+        "recolor_score_minus_base": game.get_score() - game_state.score,
+        "base_life": game_state.life,
+        "base_info": game_state.info,
+        "base_score": game_state.score,
+        "played_moves": moves,
+        "played_player_options": player_options,
         "remapper": remapper,
     }
 
 
-def run_simulation(p1_model, p2_model, pickle_output, num_game, fake_point, fake_percent):
-    sim_results = []
-    for _ in tqdm(range(num_game), leave=False):
+def run_simulation(p1_model, p2_model, output_dir, num_game, repeat_main, num_subgame, fake_percents):
+    for gnum in tqdm(range(num_game), leave=False):
         gs = run_game(p1_model, p2_model)
-        fake_spot = None
-        if fake_point is not None:
-            fake_spot = fake_point
-            if fake_spot >= len(gs.game_moves):
-                continue
-        elif fake_percent is not None:
-            fake_spot = int(len(gs.game_moves) * fake_percent)
+        output = Path(output_dir) / f"game_{gnum}"
+        Path(output).mkdir(parents=True, exist_ok=True)
+        with open(f"{output}/base", "wb") as f:
+            pickle.dump(gs, f)
+
+        sim_results = []
+        for _ in tqdm(range(0, repeat_main), leave=False):
+            sim_results.append(replay_game(p1_model, p2_model, gs, recolor=False, divergence_point=int(len(gs.game_moves) * 0.5)))
+        with open(f"{output}/base_replay", "wb") as f:
+            pickle.dump(sim_results, f)
+
+        for fake_percent in fake_percents.split(","):
+            fake_spot = int(len(gs.game_moves) * float(fake_percent))
             if fake_spot < 1:
                 continue
-        sim_results.append(replay_game(p1_model, p2_model, gs, fake_spot))
 
-    with open(pickle_output, "wb") as f:
-        pickle.dump(sim_results, f)
+            sim_results = []
+            for _ in tqdm(range(0, num_subgame), leave=False):
+                sim_results.append(replay_game(p1_model, p2_model, gs, recolor=True, divergence_point=fake_spot))
+            with open(f"{output}/intervention_{float(fake_percent)*100}_replay", "wb") as f:
+                pickle.dump(sim_results, f)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Number of games to run.
-    parser.add_argument("--num-game", type=int, default=1000)
+    parser.add_argument("--num-game", type=int, default=50)
+    parser.add_argument("--repeat-main", type=int, default=1000)
+    parser.add_argument("--num-recolor", type=int, default=1000)
     # Point of each game to fake out. (# results is <= number of games if game prematurely ends)
-    parser.add_argument("--fake-point", type=int, default=None)
-    # Percent Point of each game to fake out.
-    parser.add_argument("--fake-point-percent", type=float, default=None)
-    parser.add_argument("--glob-pattern", type=str, required=True)
+    parser.add_argument("--fake-percents", type=str, default=None)
+    parser.add_argument("--model1", type=str, default=None)
+    parser.add_argument("--model2", type=str, default=None)
+    parser.add_argument("--output", type=str, default=None)
+    #parser.add_argument("--glob-pattern", type=str, required=True)
     args = parser.parse_args()
-    assert args.fake_point is not None or args.fake_point_percent is not None
 
-    models = sorted([f for f in glob.glob(f"/home/wz2/off-belief-learning/models/{args.glob_pattern}/*/model0.pthw")])
-    for model1, model2 in tqdm(itertools.product(models, repeat=2), total=len(models)*2, leave=False):
-        path = Path(f"/home/wz2/off-belief-learning/pyhanabi/exps/{args.glob_pattern}")
-        if args.fake_point is not None:
-            path = path / f"fkpt{args.fake_point}"
-        elif args.fake_point_percent is not None:
-            path = path / f"fkpct{args.fake_point_percent * 100}"
+    Path(args.output).mkdir(parents=True, exist_ok=True)
 
-        model1_name = Path(model1).parts[-2]
-        (path / model1_name).mkdir(parents=True, exist_ok=True)
-
-        model2_name = Path(model2).parts[-2]
-        output = f"{path}/{model1_name}/{model2_name}.pkl"
-        run_simulation(model1, model2, output, num_game=args.num_game, fake_point=args.fake_point, fake_percent=args.fake_point_percent)
-    assert False
-
+    with torch.no_grad():
+        run_simulation(args.model1, args.model2, args.output,
+                       num_game=args.num_game,
+                       repeat_main=args.repeat_main,
+                       num_subgame=args.num_recolor,
+                       fake_percents=args.fake_percents)

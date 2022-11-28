@@ -50,7 +50,9 @@ def render_plots(plot_funcs, rows, cols):
 def plot(mat, title, num_player, *, fig=None, ax=None, savefig=None):
     if fig is None and ax is None:
         fig, ax = plt.subplots(figsize=(8, 8))
-    cax = ax.matshow(mat)
+    cax = ax.matshow(mat, vmin=0, vmax=1)
+    cbar = fig.colorbar(cax)
+    cbar.ax.set_ylim(0, 1)
     ax.set_title(title)
     if num_player == 2:
         ax.set_xticks(range(20))
