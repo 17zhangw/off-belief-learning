@@ -46,7 +46,7 @@ class GameState(object):
     score = None
 
 
-def run_game(p1_model, p2_model):
+def run_game(p1_model, p2_model, num_cards):
     # Load the agents.
     default_override = {"device": "cuda:0", "vdn": False}
     p1_agent, _ = utils.load_agent(p1_model, default_override)
@@ -60,9 +60,9 @@ def run_game(p1_model, p2_model):
 
     params = {
         "players": str(len(agents)),
-        "colors": "5", # 5 colors.
-        "ranks": "5", # 5 ranks.
-        "hand_size": "5", # 5 cards hand size.
+        "colors": str(num_cards),
+        "ranks": str(num_cards),
+        "hand_size": str(num_cards),
         "max_information_tokens": "8", # 8 observation tokens to start.
         "max_life_tokens": "3", # 3 life tokens to start.
         "bomb": str(0), # Start with 0 bombs.
@@ -125,7 +125,7 @@ def run_game(p1_model, p2_model):
                      score=game.get_score())
 
 
-def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1):
+def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1, num_cards=5):
     #### NOTE: the divergence_point is 1-indexed.
 
     # Load the agents.
@@ -143,10 +143,11 @@ def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1
     old_actions = game_state.game_moves
 
     def recolor_state():
-        color = [0, 1, 2, 3, 4]
-        while color == [0, 1, 2, 3, 4]:
+        color_im = [l for l in range(num_cards)]
+        color = [l for l in range(num_cards)]
+        while color == color_im:
             random.shuffle(color)
-        remapper = {i: color[i] for i in range(0, 5)}
+        remapper = {i: color[i] for i in range(num_cards)}
 
         remapped_deck = []
         for card in game_state.game_deck:
@@ -165,7 +166,7 @@ def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1
     if recolor:
         remapper, deck, game_moves = recolor_state()
     else:
-        remapper = {i:i for i in range(0, 5)}
+        remapper = {i:i for i in range(0, num_cards)}
         deck = game_state.game_deck
         game_moves = game_state.game_moves
 
@@ -184,7 +185,7 @@ def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1
             card.rank()))
 
     # This is the "force"
-    game_moves = game_moves[:10+divergence_point-1]
+    game_moves = game_moves[:(num_cards*2)+divergence_point-1]
 
     # Seed the initial h0.
     player_options = [[], []]
@@ -288,9 +289,9 @@ def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1
     }
 
 
-def run_simulation(p1_model, p2_model, output_dir, num_game, repeat_main, num_subgame, fake_percents):
+def run_simulation(p1_model, p2_model, output_dir, num_game, repeat_main, num_subgame, fake_percents, num_cards):
     for gnum in tqdm(range(num_game), leave=False):
-        gs = run_game(p1_model, p2_model)
+        gs = run_game(p1_model, p2_model, num_cards=num_cards)
         output = Path(output_dir) / f"game_{gnum}"
         Path(output).mkdir(parents=True, exist_ok=True)
         with open(f"{output}/base", "wb") as f:
@@ -298,7 +299,7 @@ def run_simulation(p1_model, p2_model, output_dir, num_game, repeat_main, num_su
 
         sim_results = []
         for _ in tqdm(range(0, repeat_main), leave=False):
-            sim_results.append(replay_game(p1_model, p2_model, gs, recolor=False, divergence_point=int(len(gs.game_moves) * 0.5)))
+            sim_results.append(replay_game(p1_model, p2_model, gs, recolor=False, divergence_point=int(len(gs.game_moves) * 0.5), num_cards=num_cards))
         with open(f"{output}/base_replay", "wb") as f:
             pickle.dump(sim_results, f)
 
@@ -309,13 +310,14 @@ def run_simulation(p1_model, p2_model, output_dir, num_game, repeat_main, num_su
 
             sim_results = []
             for _ in tqdm(range(0, num_subgame), leave=False):
-                sim_results.append(replay_game(p1_model, p2_model, gs, recolor=True, divergence_point=fake_spot))
+                sim_results.append(replay_game(p1_model, p2_model, gs, recolor=True, divergence_point=fake_spot, num_cards=num_cards))
             with open(f"{output}/intervention_{float(fake_percent)*100}_replay", "wb") as f:
                 pickle.dump(sim_results, f)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--num_cards", type=int, default=3)
     # Number of games to run.
     parser.add_argument("--num-game", type=int, default=50)
     parser.add_argument("--repeat-main", type=int, default=1000)
@@ -335,4 +337,5 @@ if __name__ == "__main__":
                        num_game=args.num_game,
                        repeat_main=args.repeat_main,
                        num_subgame=args.num_recolor,
-                       fake_percents=args.fake_percents)
+                       fake_percents=args.fake_percents,
+                       num_cards=args.num_cards)

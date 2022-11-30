@@ -73,6 +73,7 @@ PYBIND11_MODULE(hanalearn, m) {
   py::class_<R2D2Actor, std::shared_ptr<R2D2Actor>>(m, "R2D2Actor")
       .def(py::init<
            std::shared_ptr<rela::BatchRunner>,  // runner,
+           int,                                 // numCards,
            int,                                 // seed,
            int,  // numPlayer,                       // total number os players
            int,  // playerIdx,                       // player idx for this player
@@ -90,6 +91,7 @@ PYBIND11_MODULE(hanalearn, m) {
            float>())  // gamma
       .def(py::init<
            std::shared_ptr<rela::BatchRunner>,
+           int,                                 // numCards,
            int,      // numPlayer
            int,      // playerIdx
            bool,     // vdn

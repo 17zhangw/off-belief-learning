@@ -30,6 +30,7 @@ def evaluate(
     sad,
     hide_action,
     *,
+    num_cards=5,
     num_thread=10,
     max_len=80,
     device="cuda:0",
@@ -48,7 +49,7 @@ def evaluate(
     runners = [rela.BatchRunner(agent, device, 1000, ["act"]) for agent in agents]
 
     context = rela.Context()
-    games = create_envs(num_game, seed, num_player, bomb, max_len)
+    games = create_envs(num_game, seed, num_player, bomb, max_len, num_cards=num_cards)
     threads = []
 
     assert num_game % num_thread == 0
@@ -61,7 +62,7 @@ def evaluate(
             actors = []
             for i in range(num_player):
                 actor = hanalearn.R2D2Actor(
-                    runners[i], num_player, i, False, sad[i], hide_action[i]
+                    runners[i], num_cards, num_player, i, False, sad[i], hide_action[i]
                 )
                 actors.append(actor)
                 all_actors.append(actor)
@@ -81,7 +82,7 @@ def evaluate(
         runner.stop()
 
     scores = [g.last_episode_score() for g in games]
-    num_perfect = np.sum([1 for s in scores if s == 25])
+    num_perfect = np.sum([1 for s in scores if s == num_cards * num_cards])
     return np.mean(scores), num_perfect / len(scores), scores, num_perfect, all_actors
 
 

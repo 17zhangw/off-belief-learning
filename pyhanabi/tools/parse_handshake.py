@@ -45,6 +45,7 @@ def create_dataset_new(
     num_game=1000,
     num_thread=10,
     random_start=1,
+    num_cards=5,
 ):
     if not isinstance(weight_file, list):
         agent, config = utils.load_agent(
@@ -64,24 +65,16 @@ def create_dataset_new(
         configs = []
         runners = []
         for w in weight_file:
-            if w == "clone_bot":
-                wf, hide_action = model_zoo.model_zoo[w]
-                agent = utils.load_supervised_agent(wf, "cuda:0")
-                config = {
-                    "hide_action": hide_action,
-                    "num_player": 2,
-                }
-            else:
-                agent, config = utils.load_agent(
-                    w,
-                    {
-                        "vdn": False,
-                        "boltzmann_act": False,
-                        "device": "cuda:0",
-                        "uniform_priority": True,
-                        "off_belief": False,
-                    },
-                )
+            agent, config = utils.load_agent(
+                w,
+                {
+                    "vdn": False,
+                    "boltzmann_act": False,
+                    "device": "cuda:0",
+                    "uniform_priority": True,
+                    "off_belief": False,
+                },
+            )
 
             configs.append(config)
             runner = rela.BatchRunner(agent, "cuda:0", 100, ["act", "compute_priority"])
@@ -108,6 +101,7 @@ def create_dataset_new(
             seed += 1
             actor = hanalearn.R2D2Actor(
                 runner,
+                num_cards,
                 seed,
                 config["num_player"],
                 player_idx,
@@ -133,6 +127,7 @@ def create_dataset_new(
         0,  # bomb
         80,  # config["max_len"],
         random_start_player=random_start,
+        num_cards=num_cards,
     )
     context, threads = create_threads(num_thread, game_per_thread, actors, games)
 
@@ -220,6 +215,7 @@ def create_dataset(
         seed += 1
         actor = hanalearn.R2D2Actor(
             runner,
+            num_cards,
             seed,
             config["num_player"],
             0,  # player idx
@@ -320,15 +316,22 @@ def marginalize(dataset):
     return priv_s / count
 
 
-def analyze(dataset, num_player=2, vdn=True):
+def analyze(dataset, num_player=2, vdn=True, num_cards=5):
     if num_player == 2:
         p0_p1 = np.zeros((20, 20))
+        if num_cards == 3:
+            p0_p1 = np.zeros((12, 12))
     elif num_player == 3:
+        assert False
         p0_p1 = np.zeros((30, 30))
+
     for i in range(dataset.size() if vdn else dataset.size() // 2):
         epsd = dataset.get(i)
         action = epsd.action["a"]
+
         if num_player == 2 and action[0][0] == 20:
+            action = action[:, [1, 0]]
+        if num_player == 2 and action[0][0] == 12:
             action = action[:, [1, 0]]
         if num_player == 3:
             while action[0][0] == 30:
@@ -340,6 +343,7 @@ def analyze(dataset, num_player=2, vdn=True):
             a0 = action[t][p0]  # This indexing allows to avoid no-ops with vdn
             a1 = action[t + 1][p1]
             p0_p1[a0][a1] += 1
+        print(epsd.seq_len.item())
 
     denom = p0_p1.sum(1, keepdims=True)
     normed_p0_p1 = p0_p1 / denom
@@ -400,36 +404,17 @@ idx2action = [
     "R5",
 ]
 
-
-idx2action_p3 = [
+idx2action_3card = [
     "D1",
     "D2",
     "D3",
-    "D4",
-    "D5",
     "P1",
     "P2",
     "P3",
-    "P4",
-    "P5",
-    "C1_1",
-    "C2_1",
-    "C3_1",
-    "C4_1",
-    "C5_1",
-    "C1_2",
-    "C2_2",
-    "C3_2",
-    "C4_2",
-    "C5_2",
-    "R1_1",
-    "R2_1",
-    "R3_1",
-    "R4_1",
-    "R5_1",
-    "R1_2",
-    "R2_2",
-    "R3_2",
-    "R4_2",
-    "R5_2",
+    "C1",
+    "C2",
+    "C3",
+    "R1",
+    "R2",
+    "R3",
 ]

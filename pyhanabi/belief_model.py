@@ -15,41 +15,6 @@ from typing import Tuple, Dict
 import numpy as np
 
 
-class V0BeliefModel(torch.jit.ScriptModule):
-    def __init__(self, device, num_sample):
-        super().__init__()
-        self.device = device
-        self.hand_size = 5
-        self.bit_per_card = 25
-        self.num_sample = num_sample
-
-    @torch.jit.script_method
-    def get_h0(self, batchsize: int) -> Dict[str, torch.Tensor]:
-        """dummy function"""
-        shape = (1, batchsize, 1)
-        hid = {"h0": torch.zeros(*shape), "c0": torch.zeros(*shape)}
-        return hid
-
-    @torch.jit.script_method
-    def observe(self, obs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        # print("observe")
-        return obs
-
-    @torch.jit.script_method
-    def sample(self, obs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        # print("sample")
-        v0 = obs["v0"]
-        bsize = v0.size(0)
-        v0 = v0.view(bsize, self.hand_size, -1)[:, :, : self.bit_per_card]
-
-        v0 = v0.view(-1, self.bit_per_card).clamp(min=1e-5)
-        sample = v0.multinomial(self.num_sample, replacement=True)
-        # smaple: [bsize * handsize, num_sample]
-        sample = sample.view(bsize, self.hand_size, self.num_sample)
-        sample = sample.transpose(1, 2)
-        return {"sample": sample, "h0": obs["h0"], "c0": obs["c0"]}
-
-
 def pred_loss(logp, gtruth, seq_len):
     """
     logit: [seq_len, batch, hand_size, bits_per_card]
@@ -104,7 +69,7 @@ class ARBeliefModel(torch.jit.ScriptModule):
         ).to(device)
         self.lstm.flatten_parameters()
 
-        self.emb = nn.Linear(25, self.hid_dim // 8, bias=False)
+        self.emb = nn.Linear(self.out_dim, self.hid_dim // 8, bias=False)
         self.auto_regress = nn.LSTM(
             self.hid_dim + self.hid_dim // 8,
             self.hid_dim,
@@ -142,7 +107,7 @@ class ARBeliefModel(torch.jit.ScriptModule):
 
         # ar_card_in  = batch.obs[self.ar_input_key]
         seq, bsize, _ = ar_card_in.size()
-        ar_card_in = ar_card_in.view(seq * bsize, self.hand_size, 25)
+        ar_card_in = ar_card_in.view(seq * bsize, self.hand_size, self.out_dim)
 
         ar_emb_in = self.emb(ar_card_in)
         # ar_card_in: [seq * batch, 5, 64]
@@ -167,7 +132,7 @@ class ARBeliefModel(torch.jit.ScriptModule):
 
         # v0: [seq, batch, hand_size, bit_per_card]
         v0 = batch.obs["priv_ar_v0"]
-        v0 = v0.view(v0.size(0), v0.size(1), self.hand_size, 35)[:, :, :, :25]
+        v0 = v0.view(v0.size(0), v0.size(1), self.hand_size, 15)[:, :, :, :self.out_dim]
         logv0 = v0.clamp(min=1e-6).log()
         _, avg_xent_v0, _ = pred_loss(logv0, gtruth, seq_len)
         return xent, avg_xent, avg_xent_v0, nll_per_card
@@ -227,7 +192,7 @@ class ARBeliefModel(torch.jit.ScriptModule):
             sample_t = prob.multinomial(1)
             sample_t = sample_t.view(bsize, self.num_sample)
             onehot_sample_t = torch.zeros(
-                bsize, self.num_sample, 25, device=sample_t.device
+                bsize, self.num_sample, self.out_dim, device=sample_t.device
             )
             onehot_sample_t.scatter_(2, sample_t.unsqueeze(2), 1)
             in_t = self.emb(onehot_sample_t)

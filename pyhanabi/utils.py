@@ -19,58 +19,6 @@ import numpy as np
 import r2d2
 from create import create_envs
 import common_utils
-from supervised_model import SupervisedAgent
-
-
-def load_supervised_agent(weight_file, device):
-    # this is a bit hard-coded, works for now
-    # print("loading file from: ", weight_file)
-    try:
-        cfg = get_train_config(weight_file)
-    except:
-        cfg = {}
-    state_dict = torch.load(weight_file)
-
-    if "dataset" in cfg:
-        # latest version from online training
-        agent = SupervisedAgent(
-            device,
-            cfg["priv_in_dim"],
-            cfg["publ_in_dim"],
-            cfg["rnn_hid_size"],
-            cfg["num_action"],
-            cfg["lstm_layers"],
-            cfg["net"],
-            cfg["dropout"],
-        )
-        agent.load_state_dict(state_dict)
-        return agent
-
-    if cfg.get("net", "publ-lstm") == "lstm":
-        priv_in = state_dict["net.net.0.weight"].size(1)
-        out, hid = state_dict["net.out_layer.weight"].size()
-        agent = SupervisedAgent(device, priv_in, 0, hid, out, 1, "lstm", 0.0)
-        agent.load_state_dict(state_dict)
-        return agent
-
-    if not next(iter(state_dict)).startswith("net"):
-        new_state_dict = type(state_dict)()
-        for k, v in state_dict.items():
-            new_state_dict["net." + k] = v
-        state_dict = new_state_dict
-
-    priv_in = state_dict["net.priv_net.0.weight"].size(1)
-    publ_in = state_dict["net.publ_net.0.weight"].size(1)
-    if "net.final_ff.weight" in state_dict:
-        state_dict["net.out_layer.weight"] = state_dict["net.final_ff.weight"]
-        state_dict["net.out_layer.bias"] = state_dict["net.final_ff.bias"]
-        state_dict.pop("net.final_ff.weight")
-        state_dict.pop("net.final_ff.bias")
-
-    out, hid = state_dict["net.out_layer.weight"].size()
-    agent = SupervisedAgent(device, priv_in, publ_in, hid, out, 1, "publ-lstm", 0.0)
-    agent.load_state_dict(state_dict)
-    return agent
 
 
 def parse_first_dict(lines):
@@ -157,7 +105,7 @@ def load_agent(weight_file, overwrite):
         flatten_dict(cfg, new_cfg)
         cfg = new_cfg
 
-    hand_size = cfg.get("hand_size", 5)
+    num_cards = cfg.get("num_cards", 5)
 
     game = create_envs(
         1,
@@ -165,7 +113,7 @@ def load_agent(weight_file, overwrite):
         cfg["num_player"],
         cfg["train_bomb"],
         cfg["max_len"],
-        hand_size=hand_size,
+        num_cards=num_cards,
     )[0]
 
     config = {

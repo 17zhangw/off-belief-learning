@@ -25,6 +25,7 @@ class ActGroup:
         self,
         devices,
         agent,
+        num_cards,
         seed,
         num_thread,
         num_game_per_thread,
@@ -70,6 +71,7 @@ class ActGroup:
                 for j in range(num_game_per_thread):
                     actor = hanalearn.R2D2Actor(
                         self.model_runners[i % self.num_runners],
+                        num_cards,
                         seed,
                         num_player,
                         0,
@@ -96,6 +98,7 @@ class ActGroup:
                     for k in range(num_player):
                         actor = hanalearn.R2D2Actor(
                             self.model_runners[i % self.num_runners],
+                            num_cards,
                             seed,
                             num_player,
                             k,
@@ -139,113 +142,6 @@ class ActGroup:
     def update_model(self, agent):
         for runner in self.model_runners:
             runner.update_model(agent)
-
-
-class BRActGroup:
-    """
-    Best response act group
-    """
-
-    def __init__(
-        self,
-        devices,
-        agent,
-        coop_agents,
-        seed,
-        num_thread,
-        num_game_per_thread,
-        num_player,
-        explore_eps,
-        boltzmann_t,
-        method,
-        sad,
-        shuffle_color,
-        hide_action,
-        trinary,
-        replay_buffer,
-        multi_step,
-        max_len,
-        gamma,
-    ):
-        assert method in ["iql"]
-        self.devices = devices.split(",")
-
-        self.model_runners = []
-        methods = {"act": 5000, "compute_priority": 100}
-        make_model_runners(agent, self.devices, self.model_runners, methods)
-        self.num_runners = len(self.model_runners)
-
-        self.coop_model_runners = []
-        if coop_agents is not None:
-            make_model_runners(
-                coop_agents, self.devices, self.coop_model_runners, methods
-            )
-        self.num_coop_runners = len(self.coop_model_runners)
-        print(
-            f"Making a best response with: {self.num_coop_runners} independent cooperative agents"
-        )
-
-        self.actors = []
-        for i in range(num_thread):
-            thread_actors = []
-            for j in range(num_game_per_thread):
-                game_actors = []
-                for k in range(num_player):
-                    cur_explore_eps = explore_eps
-                    if k == 0:
-                        cur_model = self.model_runners[i % self.num_runners]
-                        player_buffer = replay_buffer
-                    else:
-                        if self.coop_model_runners:
-                            cur_model = self.coop_model_runners[
-                                j % self.num_coop_runners
-                            ]
-                            cur_explore_eps = [0.0]
-                        else:
-                            cur_model = self.model_runners[i % self.num_runners]
-                            cur_explore_eps = [1.0]
-                        player_buffer = None
-                    actor = hanalearn.R2D2Actor(
-                        cur_model,
-                        seed,
-                        num_player,
-                        k,
-                        cur_explore_eps,
-                        boltzmann_t,
-                        False,
-                        sad,
-                        shuffle_color,
-                        hide_action,
-                        trinary,
-                        player_buffer,
-                        multi_step,
-                        max_len,
-                        gamma,
-                    )
-                    seed += 1
-                    game_actors.append(actor)
-                for k in range(num_player):
-                    partners = game_actors[:]
-                    partners[k] = None
-                    game_actors[k].set_partners(partners)
-                thread_actors.append(game_actors)
-            self.actors.append(thread_actors)
-        print("ActGroup created")
-
-    def start(self):
-        for runner in self.model_runners:
-            runner.start()
-
-        for runner in self.coop_model_runners:
-            runner.start()
-
-    def update_model(self, agent):
-        for runner in self.model_runners:
-            runner.update_model(agent)
-
-    def update_coop_models(self, coop_agents):
-        for i, runner in enumerate(self.coop_model_runners):
-            runner.update_model(coop_agents[i % self.num_coop_runners])
 
 
 def make_model_runners(agents, devices, runners, methods):

@@ -27,7 +27,7 @@ def create_envs(
     bomb,
     max_len,
     *,
-    hand_size=5,
+    num_cards=5,
     random_start_player=1,
 ):
     games = []
@@ -36,7 +36,9 @@ def create_envs(
             "players": str(num_player),
             "seed": str(seed + game_idx),
             "bomb": str(bomb),
-            "hand_size": str(hand_size),
+            "colors": str(num_cards),
+            "ranks": str(num_cards),
+            "hand_size": str(num_cards),
             "random_start_player": str(random_start_player),
         }
         game = hanalearn.HanabiEnv(

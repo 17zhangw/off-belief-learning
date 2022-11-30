@@ -68,6 +68,8 @@ def parse_args():
     parser.add_argument("--max_len", type=int, default=80)
     parser.add_argument("--shuffle_color", type=int, default=0)
 
+    parser.add_argument("--num_cards", type=int, default=5)
+
     args = parser.parse_args()
     return args
 
@@ -138,11 +140,13 @@ def create_rl_context(args):
         cfgs["num_player"],
         cfgs["train_bomb"],
         cfgs["max_len"],
+        num_cards=args.num_cards,
     )
 
     act_group = ActGroup(
         args.act_device,
         agent,
+        args.num_cards,
         args.seed,
         args.num_thread,
         args.num_game_per_thread,
@@ -246,7 +250,7 @@ if __name__ == "__main__":
         data_gen, replay_buffer = create_sl_context(args)
         data_gen.start_data_generation(args.inf_data_loop, args.seed)
         # only for getting feature size
-        games = create_envs(1, 1, args.num_player, 0, args.max_len)
+        games = create_envs(1, 1, args.num_player, 0, args.max_len, num_cards=args.num_cards)
         cfgs = {"sad": False}
 
     while replay_buffer.size() < args.burn_in_frames:
@@ -262,7 +266,7 @@ if __name__ == "__main__":
         model = belief_model.ARBeliefModel.load(
             cfgs["belief_model"],
             args.train_device,
-            5,
+            args.num_cards,
             0,
             belief_config["fc_only"],
         )
@@ -271,8 +275,8 @@ if __name__ == "__main__":
             args.train_device,
             games[0].feature_size(cfgs["sad"])[1],
             args.hid_dim,
-            5,  # hand_size
-            25,  # bits per card
+            args.num_cards,  # hand_size
+            args.num_cards * args.num_cards,  # bits per card
             0,  # num_sample
             fc_only=args.fc_only,
         ).to(args.train_device)

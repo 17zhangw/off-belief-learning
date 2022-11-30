@@ -100,6 +100,8 @@ def parse_args():
     parser.add_argument("--act_device", type=str, default="cuda:1")
     parser.add_argument("--actor_sync_freq", type=int, default=10)
 
+    parser.add_argument("--num_cards", type=int, default=5)
+
     args = parser.parse_args()
     if args.off_belief == 1:
         args.method = "iql"
@@ -153,6 +155,7 @@ if __name__ == "__main__":
         args.num_player,
         args.train_bomb,
         args.max_len,
+        num_cards=args.num_cards,
     )
 
     agent = r2d2.R2D2Agent(
@@ -214,7 +217,7 @@ if __name__ == "__main__":
                 ARBeliefModel.load(
                     args.belief_model,
                     device,
-                    5,
+                    args.num_cards,
                     args.num_fict_sample,
                     belief_config["fc_only"],
                 )
@@ -223,6 +226,7 @@ if __name__ == "__main__":
     act_group = ActGroup(
         args.act_device,
         agent,
+        args.num_cards,
         args.seed,
         args.num_thread,
         args.num_game_per_thread,
@@ -330,6 +334,7 @@ if __name__ == "__main__":
             0,  # explore eps
             args.sad,
             args.hide_action,
+            num_cards=args.num_cards,
         )
 
         force_save_name = None

@@ -109,13 +109,13 @@ std::tuple<std::vector<hle::HanabiCardValue>, bool> filterSample(
   return {hand.CardValues(), false};
 }
 
-std::tuple<bool, bool> analyzeCardBelief(const std::vector<float>& b) {
-  assert(b.size() == 25);
+std::tuple<bool, bool> analyzeCardBelief(const std::vector<float>& b, int numCards) {
+  assert(b.size() == numCards * numCards);
   std::set<int> colors;
   std::set<int> ranks;
-  for (int c = 0; c < 5; ++c) {
-    for (int r = 0; r < 5; ++r) {
-      if (b[c * 5 + r] > 0) {
+  for (int c = 0; c < numCards; ++c) {
+    for (int r = 0; r < numCards; ++r) {
+      if (b[c * numCards + r] > 0) {
         colors.insert(c);
         ranks.insert(r);
       }
@@ -350,7 +350,7 @@ void R2D2Actor::act(HanabiEnv& env, const int curPlayer) {
   if (replayBuffer_ == nullptr) {
     if (move.MoveType() == hle::HanabiMove::kPlay) {
       auto cardBelief = perCardPrivV0_[move.CardIndex()];
-      auto [colorKnown, rankKnown] = analyzeCardBelief(cardBelief);
+      auto [colorKnown, rankKnown] = analyzeCardBelief(cardBelief, numCards_);
 
       if (colorKnown && rankKnown) {
         ++bothKnown_;

@@ -47,7 +47,6 @@ def diff_base_replay(base_replay):
 if __name__ == "__main__":
     import code
     code.interact(local=locals())
-    return
 
     #pickles = [f for f in glob.glob("exps/dual_obl2/fkpct50.0/output.pkl")]
     #res = []

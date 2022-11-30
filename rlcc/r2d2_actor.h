@@ -16,6 +16,7 @@ class R2D2Actor {
  public:
   R2D2Actor(
       std::shared_ptr<rela::BatchRunner> runner,
+      int numCards,
       int seed,
       int numPlayer,                       // total number os players
       int playerIdx,                       // player idx for this player
@@ -32,6 +33,7 @@ class R2D2Actor {
       int seqLen,
       float gamma)
       : runner_(std::move(runner))
+      , numCards_(numCards)
       , rng_(seed)
       , numPlayer_(numPlayer)
       , playerIdx_(playerIdx)
@@ -54,12 +56,14 @@ class R2D2Actor {
   // simpler constructor for eval mode
   R2D2Actor(
       std::shared_ptr<rela::BatchRunner> runner,
+      int numCards,
       int numPlayer,
       int playerIdx,
       bool vdn,
       bool sad,
       bool hideAction)
       : runner_(std::move(runner))
+      , numCards_(numCards)
       , rng_(1)  // not used in eval mode
       , numPlayer_(numPlayer)
       , playerIdx_(playerIdx)
@@ -123,6 +127,7 @@ class R2D2Actor {
 
   std::shared_ptr<rela::BatchRunner> runner_;
   std::shared_ptr<rela::BatchRunner> classifier_;
+  int numCards_;
   std::mt19937 rng_;
   const int numPlayer_;
   const int playerIdx_;
