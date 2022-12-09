@@ -55,13 +55,6 @@ pybind11_add_module(
   ${CMAKE_CURRENT_SOURCE_DIR}/rlcc/utils.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/rlcc/clone_data_generator.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/rlcc/r2d2_actor.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/searchcc/hand_dist.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/searchcc/hybrid_model.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/searchcc/rl_search.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/searchcc/sim_actor.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/searchcc/sparta.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/searchcc/thread_loop.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/searchcc/finesse.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/rlcc/pybind.cc
 )
 target_link_libraries(hanalearn PUBLIC hanabi)

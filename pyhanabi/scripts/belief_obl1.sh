@@ -16,8 +16,8 @@ python train_belief.py \
        --hid_dim 512 \
        --burn_in_frames 10000 \
        --replay_buffer_size 80000 \
-       --epoch_len 500 \
-       --num_epoch 100 \
+       --epoch_len 1000 \
+       --num_epoch 200 \
        --train_device cuda:0 \
        --act_device cuda:0 \
        --explore 1 \

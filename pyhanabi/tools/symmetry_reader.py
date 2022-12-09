@@ -1,4 +1,6 @@
+import glob
 from tqdm import tqdm
+from pathlib import Path
 import pickle
 import argparse
 import getpass
@@ -23,6 +25,7 @@ import glob
 import pandas as pd
 import pickle
 
+from tools.symmetry_analysis import GameState
 
 def diff_lists(l1, l2):
     if len(l1) != len(l2):
@@ -45,34 +48,22 @@ def diff_base_replay(base_replay):
 
 
 if __name__ == "__main__":
-    import code
-    code.interact(local=locals())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=str)
+    parser.add_argument("--input-dir", type=str)
+    args = parser.parse_args()
 
-    #pickles = [f for f in glob.glob("exps/dual_obl2/fkpct50.0/output.pkl")]
-    #res = []
-    #for p in pickles:
-    #    with open(p, "rb") as f:
-    #        experiment = pickle.load(f)
-    #        for exp in experiment:
-    #            #for move in exp["old_moves"]:
-    #            #    print(move.to_string())
-    #            #remapper = {v:k for k, v in exp["remapper"].items()}
-    #            #print(remapper)
-    #            #for move in exp["played_moves"]:
-    #            #    if move == "diverge":
-    #            #        continue
-    #            #    if move.color() != -1:
-    #            #        new_color = remapper[move.color()]
-    #            #        move.set_color(remapper[move.color()])
-    #            #        assert move.color() == new_color
-    #            #print("new Moves here")
-    #            #for move in exp["played_moves"]:
-    #            #    if move == "diverge":
-    #            #        print("diverge")
-    #            #    else:
-    #            #        print(move.to_string())
-    #            #assert False
-    #            #print(exp["game_num"], exp["remapper"])
-    #            #assert False
-    #            res.append({k: v for k, v in exp.items() if "remapper" not in k and "move" not in k and "deck" not in k})
-    #pd.DataFrame(res).to_feather("out_obl2.feather")
+    with open(args.output, "w") as output:
+        game_dirs = sorted([Path(f).parent for f in Path(args.input_dir).rglob("base")])
+        for game_dir in tqdm(game_dirs):
+            output.write(str(game_dir) + "\n")
+            output.write("base_replay:")
+            ft = ["base_replay", "intervention_25.0_replay", "intervention_50.0_replay", "intervention_75.0_replay"]
+            for fst in tqdm(ft, leave=False):
+                with open(f"{game_dir}/{fst}", "rb") as f:
+                    game = pickle.load(f)
+                    game = pd.DataFrame(game)
+                    output.write(fst + "\n")
+                    output.write(game[["recolor_life_minus_base", "recolor_info_minus_base", "recolor_score_minus_base"]].describe().to_string())
+                    output.write("\n")
+            output.flush()

@@ -20,7 +20,7 @@ python selfplay.py \
        --batchsize 128 \
        --burn_in_frames 10000 \
        --replay_buffer_size 80000 \
-       --epoch_len 250 \
+       --epoch_len 1000 \
        --num_epoch 375 \
        --num_player 2 \
        --rnn_hid_dim 512 \

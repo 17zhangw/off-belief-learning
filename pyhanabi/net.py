@@ -354,7 +354,6 @@ class PublicLSTMNet(torch.jit.ScriptModule):
         )
         h = h.view(*interim_hid_shape).transpose(0, 1)
         c = c.view(*interim_hid_shape).transpose(0, 1)
-
         return a, {"h0": h, "c0": c}
 
     @torch.jit.script_method

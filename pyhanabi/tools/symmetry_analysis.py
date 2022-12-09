@@ -269,8 +269,8 @@ def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1
             game.apply_move(move)
             hids = new_hids
 
-    history = game.move_history()
     moves = []
+    history = game.move_history()
     for move in history:
         moves.append(move.move)
 

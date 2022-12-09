@@ -141,164 +141,20 @@ def create_dataset_new(
 
     # remove extra data
     for _ in range(2):
-        data, unif = replay_buffer.sample(10, "cuda:0")
+        data, unif = replay_buffer.sample(num_game, "cpu")
         replay_buffer.update_priority(unif.detach().cpu())
         time.sleep(0.2)
 
     print("dataset size:", replay_buffer.size())
-    scores = []
-    game_length = []
-    for g in games:
-        s = g.last_episode_score()
-        if s >= 0:
-            scores.append(s)
 
-    print(scores)
+    scores = []
+    for i in range(replay_buffer.size()):
+        scores.append(replay_buffer.get(i).reward.sum())
+
     print(
         "done about to return, avg score (%d game): %.2f"
         % (len(scores), np.mean(scores))
     )
-    return replay_buffer, agent, context
-
-
-def create_dataset(
-    weight_file,
-    *,
-    eps=0,
-    trinary=True,
-    shuffle_obs=False,
-    shuffle_color=False,
-    num_game=1000,
-    num_thread=10,
-    vdn=True,
-    weight_file_2=None,
-):
-    print("WARNING: this function is deprecated, use create_dataset_new")
-    agent, config = utils.load_agent(
-        weight_file,
-        {
-            "vdn": vdn,
-            "boltzmann_act": False,
-            "device": "cuda:0",
-            "uniform_priority": True,
-            "off_belief": False,
-        },
-    )
-    runner = rela.BatchRunner(agent, "cuda:0", 100, ["act", "compute_priority"])
-
-    if weight_file_2 is not None:
-        agent_2, _ = utils.load_agent(
-            weight_file_2,
-            {
-                "vdn": vdn,
-                "boltzmann_act": False,
-                "device": "cuda:0",
-                "uniform_priority": True,
-                "off_belief": False,
-            },
-        )
-        runner_2 = rela.BatchRunner(agent_2, "cuda:0", 100, ["act", "compute_priority"])
-
-    replay_buffer = rela.RNNPrioritizedReplay(
-        num_game,  # args.dataset_size,
-        1,  # args.seed,
-        0,  # args.priority_exponent, uniform sampling
-        1,  # args.priority_weight,
-        0,  # args.prefetch,
-    )
-
-    actors = []
-    game_per_thread = 1
-    seed = 0
-    for i in range(num_thread):
-        # thread_actors = []
-        seed += 1
-        actor = hanalearn.R2D2Actor(
-            runner,
-            num_cards,
-            seed,
-            config["num_player"],
-            0,  # player idx
-            [0],
-            [],
-            vdn,
-            False,  # sad
-            False,  # shuffle color
-            config["hide_action"],
-            trinary,
-            replay_buffer,
-            1,  # args.multi_step,
-            80,
-            0.999,  # args.gamma,
-        )
-        # thread_actors.append(actor)
-        if weight_file_2 is None:
-            actors.append([[actor]])
-        else:
-            seed += 1
-            actor_2 = hanalearn.R2D2Actor(
-                runner_2,
-                seed,
-                config["num_player"],
-                1,
-                [0],
-                [],
-                False,  # vdn
-                False,  # sad
-                False,  # shuffle color
-                config["hide_action"],
-                trinary,
-                replay_buffer,  # We want to write actor 2 to the replay buffer
-                1,  # mutli step, does not matter
-                80,  # max_seq_len, default to 80
-                0.999,  # gamma, does not matter
-            )
-
-            actors.append([[actor, actor_2]])
-
-    eps = [eps for _ in range(game_per_thread)]
-    games = create_envs(
-        num_thread * game_per_thread,
-        1,  # seed
-        config["num_player"],
-        config["train_bomb"],
-        config["max_len"],
-        random_start_player=0,
-    )
-    context, threads = create_threads(num_thread, game_per_thread, actors, games)
-
-    runner.start()
-    if weight_file_2 is not None:
-        runner_2.start()
-    context.start()
-    while replay_buffer.size() < num_game:
-        # print("collecting data from replay buffer:", replay_buffer.size())
-        time.sleep(0.2)
-
-    context.pause()
-
-    # remove extra data
-    for _ in range(2):
-        data, unif = replay_buffer.sample(10, "cuda:0")
-        replay_buffer.update_priority(unif.detach().cpu())
-        time.sleep(0.2)
-
-    print("dataset size:", replay_buffer.size())
-    scores = []
-    game_length = []
-    for g in games:
-        s = g.last_episode_score()
-        if s > 0:
-            scores.append(s)
-            # TODO: removed due to refactor, can be add back if needed
-            # game_length.append(g.last_num_step())
-
-    print(scores)
-    print(
-        "done about to return, avg score (%d game): %.2f"
-        % (len(scores), np.mean(scores))
-    )
-    # print (f"game lengths are: {game_length} average length is: {np.array(game_length).mean()}")
     return replay_buffer, agent, context
 
 
@@ -329,9 +185,9 @@ def analyze(dataset, num_player=2, vdn=True, num_cards=5):
         epsd = dataset.get(i)
         action = epsd.action["a"]
 
-        if num_player == 2 and action[0][0] == 20:
+        if num_player == 2 and num_cards == 5 and action[0][0] == 20:
             action = action[:, [1, 0]]
-        if num_player == 2 and action[0][0] == 12:
+        if num_player == 2 and num_cards == 3 and action[0][0] == 12:
             action = action[:, [1, 0]]
         if num_player == 3:
             while action[0][0] == 30:
@@ -343,9 +199,9 @@ def analyze(dataset, num_player=2, vdn=True, num_cards=5):
             a0 = action[t][p0]  # This indexing allows to avoid no-ops with vdn
             a1 = action[t + 1][p1]
             p0_p1[a0][a1] += 1
-        print(epsd.seq_len.item())
 
     denom = p0_p1.sum(1, keepdims=True)
+    denom[denom == 0] = 1
     normed_p0_p1 = p0_p1 / denom
     return normed_p0_p1, p0_p1
 
