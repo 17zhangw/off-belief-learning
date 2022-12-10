@@ -1,3 +1,4 @@
+import numpy as np
 from pathlib import Path
 import itertools
 import glob
@@ -291,7 +292,20 @@ def replay_game(p1_model, p2_model, game_state, recolor=True, divergence_point=1
 
 def run_simulation(p1_model, p2_model, output_dir, num_game, repeat_main, num_subgame, fake_percents, num_cards):
     for gnum in tqdm(range(num_game), leave=False):
-        gs = run_game(p1_model, p2_model, num_cards=num_cards)
+        scores = []
+        for _ in tqdm(range(1000), leave=False):
+            gs = run_game(p1_model, p2_model, num_cards=num_cards)
+            scores.append(gs.score)
+        avg_score = np.mean(scores)
+
+        gs = None
+        i = 0
+        avg_score = min(avg_score, num_cards * num_cards - 1)
+        while gs is None or gs.score < avg_score or gs.score == num_cards * num_cards:
+            gs = run_game(p1_model, p2_model, num_cards=num_cards)
+            i += 1
+            assert i < 1000
+
         output = Path(output_dir) / f"game_{gnum}"
         Path(output).mkdir(parents=True, exist_ok=True)
         with open(f"{output}/base", "wb") as f:

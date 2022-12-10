@@ -57,6 +57,13 @@ if __name__ == "__main__":
         game_dirs = sorted([Path(f).parent for f in Path(args.input_dir).rglob("base")])
         for game_dir in tqdm(game_dirs):
             output.write(str(game_dir) + "\n")
+            output.write("base:")
+            with open(f"{game_dir}/base", "rb") as f:
+                game = pickle.load(f)
+                output.write(f"Life: {game.life}\n")
+                output.write(f"Info: {game.info}\n")
+                output.write(f"Score: {game.score}\n")
+
             output.write("base_replay:")
             ft = ["base_replay", "intervention_25.0_replay", "intervention_50.0_replay", "intervention_75.0_replay"]
             for fst in tqdm(ft, leave=False):
